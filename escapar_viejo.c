@@ -7,7 +7,7 @@
 
 const int distanceToMaintain = 10;
 const int distanceCritial = 5;
-const int distanceToStartBraking = 45;
+const int distanceToStartBraking = 30;
 
 int currentDistance = 0;
 
@@ -26,7 +26,7 @@ void turn_a_bit(){
 void go_backwards(){
 	motor[left] = -30;
 	motor[right] = -30;
-	sleep(500);
+	sleep(1000);
 }
 
 void go_forward(){
@@ -46,7 +46,7 @@ task main()
 	{
 		//-------------------TOUCH SENSOR-------------------
 		// Turn the LED red if the touch sensor is pressed
-		if (SensorValue[Touch])
+/* 		if (SensorValue[Touch])
 		{
 			displayCenteredBigTextLine(4, "Pressed!");
 			setLEDColor(ledRed);
@@ -59,7 +59,7 @@ task main()
 			displayCenteredBigTextLine(4, "Not Pressed!");
 			setLEDColor(ledGreen);
 			go_forward();
-		}
+		} */
 
 		//-------------------ULTRASOUND SENSOR--------------------
 
@@ -93,6 +93,7 @@ task main()
 		//parate loco
 		else if (distanceToMaintain > currentDistance && currentDistance > distanceCritial)
 		{
+			go_backwards();
 			turn_a_bit();
 		}
 
