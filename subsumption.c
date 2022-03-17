@@ -7,8 +7,9 @@
 
 TSemaphore semaphore;
 const int distToEscape = 10;
-const int distToApproach = 50;
+const int distToApproach = 80;
 int currentDistance = 0;
+int lockTasks[4] = {0, 0, 0, 0};
 
 void close_claw(){
 	motor[claw] = 30;
@@ -38,6 +39,18 @@ void stop_moving(){
 	motor[right] = 0;
 }
 
+void lock(int *locks) {
+	semaphoreLock(semaphore);
+	lockTasks = *locks;
+}
+
+void unlock() {
+	if (bDoesTaskOwnSemaphore(semaphore))
+	{
+		semaphoreUnlock(semaphore);
+	}
+}
+
 task escape()
 {
 	while (true)
@@ -46,39 +59,14 @@ task escape()
 		currentDistance = SensorValue[Sonar];
 
 		if (currentDistance < distToEscape || SensorValue[Touch]) {
+			int lk[4] = {0,1,1,1};
+			lock(lk);
 
-			semaphoreLock(semaphore);
+			setLEDColor(ledRed);
+			go_backwards();
+			turn_a_bit();
 
-			if (bDoesTaskOwnSemaphore(semaphore))
-			{
-				setLEDColor(ledRed);
-				go_backwards();
-				turn_a_bit();
-
-				semaphoreUnlock(semaphore);
-			}
-
-		}
-	}
-}
-
-task approach_walls()
-{
-	while (true)
-	{
-		// Read the sensor
-		currentDistance = SensorValue[Sonar];
-
-		if (currentDistance > distToApproach) {
-
-			semaphoreLock(semaphore);
-
-				if (bDoesTaskOwnSemaphore(semaphore))
-				{
-					setLEDColor(ledOrange);
-					go_forward();
-					semaphoreUnlock(semaphore);
-				}
+			unlock();
 		}
 	}
 }
@@ -106,26 +94,45 @@ task follow_walls()
 
 	while (true)
 	{
+		if (lockTasks[2] == 0) {
+			int lk[4] = {0,0,0,1};
+			lock(lk);
 
-		semaphoreLock(semaphore);
+			while( currentDistance < distToApproach) {
+				setLEDColor(ledGreen);
+				// Read the sensor
+				currentDist = SensorValue[Sonar];
+				error = targetDist - currentDist;
+				integral = error + integral;
+				derivative = error + lastError;
+				correction = kp*error + ki*integral + kd*derivative;
+				motor[right] = baseSpeed - correction;
+				motor[left] = baseSpeed + correction;
+				lastError = error;
+			}
 
-		if (bDoesTaskOwnSemaphore(semaphore))
-		{
-			setLEDColor(ledGreen);
-			// Read the sensor
-			currentDist = SensorValue[Sonar];
-			error = targetDist - currentDist;
-			integral = error + integral;
-			derivative = error + lastError;
-			correction = kp*error + ki*integral + kd*derivative;
-			motor[right] = baseSpeed - correction;
-			motor[left] = baseSpeed + correction;
-			lastError = error;
-
-			semaphoreUnlock(semaphore);
+			unlock();
 		}
+	}
+}
 
-;
+task approach_walls()
+{
+	while (true)
+	{
+		// Read the sensor
+		currentDistance = SensorValue[Sonar];
+
+		if (currentDistance > distToApproach && lockTasks[3] == 0) {
+
+			int lk[4] = {0,0,0,0};
+			lock(lk);
+
+			setLEDColor(ledOrange);
+			go_forward();
+
+			unlock();
+		}
 	}
 }
 
@@ -135,8 +142,8 @@ task main()
 	semaphoreInitialize(semaphore);
 
 	startTask(escape);
-	startTask(approach_walls);
 	startTask(follow_walls);
+	startTask(approach_walls);
 
 	while(true){
 		abortTimeslice();
