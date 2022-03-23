@@ -11,6 +11,7 @@ const int distToEscape = 10;
 const int distToApproach = 80;
 int currentDistance = 0;
 int lockTasks[4] = {0, 0, 0, 0};
+int light_searching = 0;
 
 void close_claw(){
 	motor[claw] = 30;
@@ -91,13 +92,13 @@ int * searchLight(long redValue, long greenValue, long blueValue){
 		if (colorAmbient[i] > colorAmbient[largest_index]){
 			largest_index = i;
 		}
-  }
+	}
 
-  //Center robot
+	//Center robot
 	turnRight();
 	index_val[0] = largest_index;
 	index_val[1] = colorAmbient[largest_index];
-  return index_val;
+	return index_val;
 }
 
 void lock(int *locks) {
@@ -142,29 +143,39 @@ task chase_light()
 	int max_val = 0;
 
 	float initialColorAmbient = getColorAmbient(colorSensor);
+	//getColorRGB(colorSensor, redValue, greenValue, blueValue);
+	//float initialColorAmbient = redValue;
 
 	while(true){
-		int * dir_light = searchLight(redValue, greenValue, blueValue);
-		direction = dir_light[0];
-		max_val = dir_light[1];
-		if (max_val > initialColorAmbient){
+		light_searching = 1;
+		if(lockTasks[1] == 0){
 			int lk[4] = {0,0,1,1};
 			lock(lk);
+
 			setLEDColor(ledGreenFlash);
-			writeDebugStreamLine("Direction %d", direction);
-			switch(direction){
-				case 0:
-					turnRight();
-					break;
-				case 2:
-					turnLeft();
-				 	break;
+			int * dir_light = searchLight(redValue, greenValue, blueValue);
+			direction = dir_light[0];
+			max_val = dir_light[1];
+
+			//writeDebugStreamLine("max_val %d initialColor %d dir %d", max_val, initialColorAmbient, direction);
+			if (max_val > initialColorAmbient){
+				switch(direction){
+					case 0:
+						turnRight();
+						break;
+					case 1:
+						break;
+					case 2:
+						turnLeft();
+					 	break;
+				}
+				go_forward();
+				sleep(600);
 			}
-			writeDebugStreamLine("max_val %d red_value %d", max_val, redValue);
-			go_forward();
-			sleep(600);
 			unlock();
 		}
+		light_searching = 0;
+		sleep(3000);
 	}
 
 }
@@ -191,7 +202,7 @@ task follow_walls()
 			int lk[4] = {0,0,0,1};
 			lock(lk);
 
-			while( currentDistance < distToApproach) {
+			while(currentDistance < distToApproach && !light_searching) {
 				setLEDColor(ledGreen);
 				// Read the sensor
 				currentDist = SensorValue[Sonar];
@@ -223,6 +234,7 @@ task approach_walls()
 
 			setLEDColor(ledOrange);
 			go_forward();
+			sleep(600);
 
 			unlock();
 		}
@@ -235,9 +247,9 @@ task main()
 	semaphoreInitialize(semaphore);
 
 	startTask(escape);
+	startTask(chase_light);
 	startTask(follow_walls);
 	startTask(approach_walls);
-	startTask(chase_light);
 
 	while(true){
 		abortTimeslice();
