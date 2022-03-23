@@ -1,5 +1,6 @@
 #pragma config(Sensor, S1,     Touch,          sensorEV3_Touch)
 #pragma config(Sensor, S4,     Sonar,          sensorEV3_Ultrasonic)
+#pragma config(Sensor, S3,     colorSensor,    sensorEV3_Color, modeEV3Color_Color)
 #pragma config(Motor,  motorA,          claw,          tmotorEV3_Large, PIDControl, encoder)
 #pragma config(Motor,  motorB,          left,          tmotorEV3_Large, PIDControl, encoder)
 #pragma config(Motor,  motorC,          right,         tmotorEV3_Large, PIDControl, encoder)
@@ -23,6 +24,23 @@ void turn_a_bit(){
 	sleep(500);
 }
 
+void turnRight(){
+	motor[left] = 30;
+	motor[right] = -30;
+	sleep(300);
+	motor[left] = 0;
+	motor[right] = 0;
+}
+
+void turnLeft(){
+	motor[left] = -30;
+	motor[right] = 30;
+	sleep(300);
+	motor[left] = 0;
+	motor[right] = 0;
+}
+
+
 void go_backwards(){
 	motor[left] = -30;
 	motor[right] = -30;
@@ -34,9 +52,52 @@ void go_forward(){
 	motor[right] = 30;
 }
 
-void stop_moving(){
-	motor[left] = 0;
-	motor[right] = 0;
+int * searchLight(long redValue, long greenValue, long blueValue){
+	static int  index_val[2];
+
+	float discard;
+	float colorAmbient[3] = {0, 0, 0};
+	//Mundo real:
+	discard = getColorAmbient(colorSensor);
+	//Simulacion:
+	//getColorRGB(colorSensor, redValue, greenValue, blueValue);
+	//colorAmbient[0] = redValue;
+	sleep(100);
+
+	turnRight();
+	sleep(200);
+	colorAmbient[0] = getColorAmbient(colorSensor);
+	//getColorRGB(colorSensor, redValue, greenValue, blueValue);
+	//colorAmbient[0] = redValue;
+	sleep(200);
+
+	turnLeft();
+	sleep(200);
+	colorAmbient[1] = getColorAmbient(colorSensor);
+	//getColorRGB(colorSensor, redValue, greenValue, blueValue);
+	//colorAmbient[1] = redValue;
+	sleep(200);
+
+	turnLeft();
+	sleep(200);
+	colorAmbient[2] = getColorAmbient(colorSensor);
+	//getColorRGB(colorSensor, redValue, greenValue, blueValue);
+	//colorAmbient[2] = redValue;
+	sleep(200);
+
+	//Sort greatest direction influence
+	int largest_index = 1;
+	for (int i = 0; i < 3; i++) {
+		if (colorAmbient[i] > colorAmbient[largest_index]){
+			largest_index = i;
+		}
+  }
+
+  //Center robot
+	turnRight();
+	index_val[0] = largest_index;
+	index_val[1] = colorAmbient[largest_index];
+  return index_val;
 }
 
 void lock(int *locks) {
@@ -73,6 +134,38 @@ task escape()
 
 task chase_light()
 {
+	long redValue = 0;
+	long greenValue = 0;
+	long blueValue = 0;
+
+	int direction; //0-Right 1-Center 2-Left
+	int max_val = 0;
+
+	float initialColorAmbient = getColorAmbient(colorSensor);
+
+	while(true){
+		int * dir_light = searchLight(redValue, greenValue, blueValue);
+		direction = dir_light[0];
+		max_val = dir_light[1];
+		if (max_val > initialColorAmbient){
+			int lk[4] = {0,0,1,1};
+			lock(lk);
+			setLEDColor(ledGreenFlash);
+			writeDebugStreamLine("Direction %d", direction);
+			switch(direction){
+				case 0:
+					turnRight();
+					break;
+				case 2:
+					turnLeft();
+				 	break;
+			}
+			writeDebugStreamLine("max_val %d red_value %d", max_val, redValue);
+			go_forward();
+			sleep(600);
+			unlock();
+		}
+	}
 
 }
 
@@ -144,6 +237,7 @@ task main()
 	startTask(escape);
 	startTask(follow_walls);
 	startTask(approach_walls);
+	startTask(chase_light);
 
 	while(true){
 		abortTimeslice();
