@@ -53,6 +53,11 @@ void go_forward(){
 	motor[right] = 30;
 }
 
+void stay_put(){
+	motor[left] = 0;
+	motor[right] = 0;
+}
+
 int * searchLight(long redValue, long greenValue, long blueValue){
 	static int  index_val[2];
 
@@ -145,37 +150,22 @@ task chase_light()
 	float initialColorAmbient = getColorAmbient(colorSensor);
 	//getColorRGB(colorSensor, redValue, greenValue, blueValue);
 	//float initialColorAmbient = redValue;
-
-	while(true){
-		light_searching = 1;
-		if(lockTasks[1] == 0){
-			int lk[4] = {0,0,1,1};
-			lock(lk);
-
-			setLEDColor(ledGreenFlash);
-			int * dir_light = searchLight(redValue, greenValue, blueValue);
-			direction = dir_light[0];
-			max_val = dir_light[1];
-
-			//writeDebugStreamLine("max_val %d initialColor %d dir %d", max_val, initialColorAmbient, direction);
-			if (max_val > initialColorAmbient){
-				switch(direction){
-					case 0:
-						turnRight();
-						break;
-					case 1:
-						break;
-					case 2:
-						turnLeft();
-					 	break;
-				}
+	while(getColorAmbient(colorSensor) > initialColorAmbient){
+		if (getColorAmbient(colorSensor) > initialColorAmbient){
+			if(lockTasks[1] == 0){
+				setLEDColor(ledOrangePulse);
+				light_searching = 1;
+				int lk[4] = {0,0,1,1};
+				lock(lk);
 				go_forward();
-				sleep(600);
+				sleep(1000);
+				stay_put();
+				sleep(2000);
+				unlock();
 			}
-			unlock();
+			light_searching = 0;
+			//sleep(3000);
 		}
-		light_searching = 0;
-		sleep(3000);
 	}
 
 }
@@ -234,8 +224,6 @@ task approach_walls()
 
 			setLEDColor(ledOrange);
 			go_forward();
-			sleep(600);
-
 			unlock();
 		}
 	}
