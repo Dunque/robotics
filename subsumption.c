@@ -1,6 +1,7 @@
 #pragma config(Sensor, S1,     Touch,          sensorEV3_Touch)
-#pragma config(Sensor, S4,     Sonar,          sensorEV3_Ultrasonic)
+#pragma config(Sensor, S2,     gyro,           sensorEV3_Gyro)
 #pragma config(Sensor, S3,     colorSensor,    sensorEV3_Color, modeEV3Color_Color)
+#pragma config(Sensor, S4,     Sonar,          sensorEV3_Ultrasonic)
 #pragma config(Motor,  motorA,          claw,          tmotorEV3_Large, PIDControl, encoder)
 #pragma config(Motor,  motorB,          left,          tmotorEV3_Large, PIDControl, encoder)
 #pragma config(Motor,  motorC,          right,         tmotorEV3_Large, PIDControl, encoder)
@@ -10,6 +11,7 @@
 const int distToEscape = 18;
 const int distToApproach = 30;
 int currentDistance = 0;
+bool isTurning = false;
 
 //Semaforos
 TSemaphore semaphore;
@@ -23,17 +25,27 @@ int escapeCount = 0;
 int initialColorAmbient = 0;
 int currentColor = 0;
 
-void turnRight(){
-	motor[left] = 30;
-	motor[right] = -30;
-	sleep(300);
-	motor[left] = 0;
-	motor[right] = 0;
-}
-
 void turnLeft(){
-	motor[left] = -30;
-	motor[right] = 30;
+//Resets the gyro on port 2 to 0 degrees
+	if (isTurning == false){
+		isTurning = true;
+		resetGyro(gyro);
+	}
+ //Keep looping until the gyro sensor reads greater
+ //than 90 degrees
+
+ repeatUntil(getGyroDegrees(gyro) > 90)
+ {
+   writeDebugStream("giro: %d\n", getGyroDegrees(gyro));
+  //Point turn to the left
+  setMotorSpeed(motorC, -30);
+  setMotorSpeed(motorB, 30);
+ }
+ isTurning = false;
+
+ //Stop the motors at the end of the turn
+ setMotorSpeed(motorB, 0);
+ setMotorSpeed(motorC, 0);
 }
 
 void stay_put(){
@@ -47,16 +59,34 @@ void close_claw(){
 	motor[claw] = 0;
 }
 
-void turn_a_bit(){
-	motor[left] = 30;
-	motor[right] = -30;
-	//sleep(500);
+void turnRight(){
+//Resets the gyro on port 2 to 0 degrees
+	if (isTurning == false){
+		isTurning = true;
+		resetGyro(gyro);
+	}
+ //Keep looping until the gyro sensor reads greater
+ //than 90 degrees
+
+ repeatUntil(getGyroDegrees(gyro) < -90)
+ {
+   writeDebugStream("giro: %d\n", getGyroDegrees(gyro));
+  //Point turn to the left
+  setMotorSpeed(motorC, 30);
+  setMotorSpeed(motorB, -30);
+ }
+
+ isTurning = false;
+
+ //Stop the motors at the end of the turn
+ setMotorSpeed(motorB, 0);
+ setMotorSpeed(motorC, 0);
 }
 
 void go_backwards(){
 	motor[left] = -30;
 	motor[right] = -30;
-	sleep(1000);
+	//sleep(1000);
 }
 
 void go_forward(){
@@ -64,15 +94,18 @@ void go_forward(){
 	motor[right] = 30;
 }
 
-void lock(int priority){
-	if (priority >= currentPriority){
-		semaphoreLock(semaphore);
-	}
-}
-
 void unlock(int priority){
 	currentPriority = priority;
 	semaphoreUnlock(semaphore);
+}
+
+void lock(int priority){
+	if (priority >= currentPriority){
+		if (bDoesTaskOwnSemaphore(semaphore) == true) {
+			unlock(priority);
+		}
+		semaphoreLock(semaphore);
+	}
 }
 
 task escape() {
@@ -87,18 +120,13 @@ task escape() {
 
 	if (bDoesTaskOwnSemaphore(semaphore) == true) {
 		setLEDColor(ledRed);
-		//escapeCount = 0;
-		while (escapeCount < 1800){
-			escapeCount++;
-			//writeDebugStream("escapeCount: %d\n", escapeCount);
-			if (escapeCount < 300) {
-				go_backwards();
-			} else {
-				turn_a_bit();
-			}
-		}
-		escapeCount = 0;
-		unlock(3);
+
+
+		//go_backwards();
+		//sleep(1000);
+		turnRight();
+
+		unlock(0);
 	} else {
 		escapeCount = 0;
 	}
@@ -107,7 +135,7 @@ task escape() {
 task chase_light() {
 	//Read the sensor
 	currentColor = getColorAmbient(colorSensor);
-	writeDebugStream("currentColor: %d initialColorAmbient %d\n", currentColor, initialColorAmbient);
+	//writeDebugStream("currentColor: %d initialColorAmbient %d\n", currentColor, initialColorAmbient);
 	//int currentColor = 0;
 	//getColorRGB(colorSensor, redValue, greenValue, blueValue);
 	//currentColor = redValue;
@@ -122,7 +150,7 @@ task chase_light() {
 	if (bDoesTaskOwnSemaphore(semaphore)) {
 		setLEDColor(ledGreen);
 		go_forward();
-		unlock(2);
+		unlock(0);
 	}
 
 }
@@ -151,7 +179,7 @@ task follow_walls() {
 	int lastError = 0;
 	int integral = 0;
 
-	if (currentDistance < distToApproach) {
+	if (currentDistance < distToApproach && currentDistance > distToEscape) {
 		if (!bDoesTaskOwnSemaphore(semaphore)) {
 			lock(2);
 		}
@@ -169,7 +197,7 @@ task follow_walls() {
 		motor[left] = baseSpeed + correction;
 		lastError = error;
 
-		unlock(1);
+		unlock(0);
 	}
 
 }
@@ -210,6 +238,8 @@ task main()
 	sleep(1000);
 	initialColorAmbient = getColorAmbient(colorSensor);
 	writeDebugStream("initialColorAmbient: %d\n", initialColorAmbient);
+
+	resetGyro(gyro);
 
 	while(true){
 		startTask(escape);
